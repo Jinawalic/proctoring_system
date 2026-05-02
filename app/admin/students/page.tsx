@@ -3,28 +3,26 @@
 import { Users, Search, MoreVertical, X, Check, Edit2, Trash2, Key, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { useState } from "react";
 
-const INITIAL_STUDENTS = [
-  { id: "STU-001", matricNumber: "MAT-2023-001", name: "Alice Johnson", email: "alice@example.com", enrolled: 3, completed: 2 },
-  { id: "STU-002", matricNumber: "MAT-2023-002", name: "Michael Smith", email: "michael@example.com", enrolled: 4, completed: 4 },
-  { id: "STU-003", matricNumber: "MAT-2023-003", name: "Sarah Williams", email: "sarah@example.com", enrolled: 1, completed: 0 },
-  { id: "STU-004", matricNumber: "MAT-2023-004", name: "David Brown", email: "david@example.com", enrolled: 5, completed: 1 },
-];
+
+
+import { useEffect } from "react";
 
 export default function StudentsPage() {
-  const [students, setStudents] = useState(INITIAL_STUDENTS);
+  const [students, setStudents] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editStudent, setEditStudent] = useState<typeof INITIAL_STUDENTS[0] | null>(null);
-  const [resetPasswordStudent, setResetPasswordStudent] = useState<typeof INITIAL_STUDENTS[0] | null>(null);
-  const [studentToDelete, setStudentToDelete] = useState<typeof INITIAL_STUDENTS[0] | null>(null);
+  const [editStudent, setEditStudent] = useState<any | null>(null);
+  const [resetPasswordStudent, setResetPasswordStudent] = useState<any | null>(null);
+  const [studentToDelete, setStudentToDelete] = useState<any | null>(null);
 
   const [newStudent, setNewStudent] = useState({ name: "", email: "", matricNumber: "" });
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   // Loading States
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Toast
   const [toast, setToast] = useState<{ show: boolean, msg: string, type: "success" | "error" } | null>(null);
@@ -34,25 +32,53 @@ export default function StudentsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const fetchStudents = async () => {
+    try {
+      const res = await fetch("/api/admin/students");
+      const data = await res.json();
+      setStudents(data);
+    } catch (error) {
+      showToast("Failed to load students", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.id.toLowerCase().includes(searchQuery.toLowerCase())
+    student.matricNumber.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newStudent.name || !newStudent.email) return;
+    if (!newStudent.name || !newStudent.email || !newStudent.matricNumber) return;
 
     setIsSaving(true);
-    await new Promise(r => setTimeout(r, 800)); // Simulate API
-
-    const newId = `STU-00${students.length + 1}`;
-    setStudents([...students, { ...newStudent, id: newId, enrolled: 0, completed: 0 }]);
-    setNewStudent({ name: "", email: "", matricNumber: "" });
-    setIsAddModalOpen(false);
-    setIsSaving(false);
-    showToast("Student added successfully with default password '12345678'", "success");
+    try {
+      const res = await fetch("/api/admin/students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newStudent),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStudents([data, ...students]);
+        setNewStudent({ name: "", email: "", matricNumber: "" });
+        setIsAddModalOpen(false);
+        showToast("Student added successfully with default password '12345678'", "success");
+      } else {
+        showToast(data.error || "Failed to add student", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleEditStudent = async (e: React.FormEvent) => {
@@ -60,33 +86,72 @@ export default function StudentsPage() {
     if (!editStudent) return;
 
     setIsSaving(true);
-    await new Promise(r => setTimeout(r, 800)); // Simulate API
-
-    setStudents(students.map(s => s.id === editStudent.id ? editStudent : s));
-    setEditStudent(null);
-    setIsSaving(false);
-    showToast("Student details updated successfully!", "success");
+    try {
+      const res = await fetch(`/api/admin/students/${editStudent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editStudent.name,
+          email: editStudent.email,
+          matricNumber: editStudent.matricNumber,
+        }),
+      });
+      if (res.ok) {
+        setStudents(students.map(s => s.id === editStudent.id ? editStudent : s));
+        setEditStudent(null);
+        showToast("Student details updated successfully!", "success");
+      } else {
+        showToast("Failed to update student", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleResetPassword = async () => {
     if (!resetPasswordStudent) return;
 
     setIsSaving(true);
-    await new Promise(r => setTimeout(r, 800)); // Simulate API
-
-    setResetPasswordStudent(null);
-    setIsSaving(false);
-    showToast(`Password for ${resetPasswordStudent.name} reset to '12345678'`, "success");
+    try {
+      const res = await fetch(`/api/admin/students/${resetPasswordStudent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: "12345678" }),
+      });
+      if (res.ok) {
+        setResetPasswordStudent(null);
+        showToast(`Password for ${resetPasswordStudent.name} reset to '12345678'`, "success");
+      } else {
+        showToast("Failed to reset password", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const confirmDelete = async () => {
     if (!studentToDelete) return;
     setIsSaving(true);
-    await new Promise(r => setTimeout(r, 600)); // Simulate API
-    setStudents(students.filter(s => s.id !== studentToDelete.id));
-    setStudentToDelete(null);
-    setIsSaving(false);
-    showToast("Student deleted successfully!", "success");
+    try {
+      const res = await fetch(`/api/admin/students/${studentToDelete.id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setStudents(students.filter(s => s.id !== studentToDelete.id));
+        setStudentToDelete(null);
+        showToast("Student deleted successfully!", "success");
+      } else {
+        showToast("Failed to delete student", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

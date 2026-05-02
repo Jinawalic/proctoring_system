@@ -1,26 +1,22 @@
 "use client";
 
 import { FileText, Search, Plus, X, Settings2, Edit, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-const INITIAL_EXAMS = [
-  { id: "EXM-001", name: "CS101 - Introduction to Computer Science", questions: 20, duration: "30", status: "Active" },
-  { id: "EXM-002", name: "Math201 - Advanced Calculus", questions: 40, duration: "60", status: "Draft" },
-  { id: "EXM-003", name: "Physics105 - Mechanics", questions: 30, duration: "45", status: "Closed" },
-  { id: "EXM-004", name: "History101 - World History", questions: 50, duration: "60", status: "Active" },
-];
 
 export default function ExamsPage() {
-  const [exams, setExams] = useState(INITIAL_EXAMS);
+  const [exams, setExams] = useState<any[]>([]);
+  const [activeExamId, setActiveExamId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQuestionsModalOpen, setIsQuestionsModalOpen] = useState(false);
-  const [manageExam, setManageExam] = useState<typeof INITIAL_EXAMS[0] | null>(null);
+  const [manageExam, setManageExam] = useState<any | null>(null);
 
   // States
-  const [newExam, setNewExam] = useState({ name: "", questions: "", duration: "" });
+  const [newExam, setNewExam] = useState({ code: "", name: "", questions: "", duration: "" });
+  const [isLoading, setIsLoading] = useState(true);
   const [isSavingExam, setIsSavingExam] = useState(false);
 
   // Questions State
@@ -36,70 +32,147 @@ export default function ExamsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const fetchExams = async () => {
+    try {
+      const res = await fetch("/api/admin/exams");
+      const data = await res.json();
+      if (res.ok) {
+        setExams(data.map((ex: any) => ({
+          id: ex.id,
+          code: ex.courseCode,
+          name: ex.title,
+          questions: ex.questions,
+          duration: ex.duration,
+          status: ex.status
+        })));
+      }
+    } catch (error) {
+      showToast("Failed to load exams", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchExams();
+  }, []);
+
   const filteredExams = exams.filter(exam =>
-    exam.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    exam.id.toLowerCase().includes(searchQuery.toLowerCase())
+    (exam.name?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+    (exam.code?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+    (exam.id?.toLowerCase() || "").includes(searchQuery.toLowerCase())
   );
 
   const handleCreateExam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newExam.name || !newExam.questions || !newExam.duration) return;
+    if (!newExam.code || !newExam.name || !newExam.questions || !newExam.duration) return;
 
     setIsSavingExam(true);
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const res = await fetch("/api/admin/exams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newExam),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setExams([{
+          id: data.id,
+          code: data.courseCode,
+          name: data.title,
+          questions: data.questions,
+          duration: data.duration,
+          status: data.status
+        }, ...exams]);
+        
+        setActiveExamId(data.id);
+        setNewExam({ code: "", name: "", questions: "", duration: "" });
+        setIsCreateModalOpen(false);
+        showToast("Exam draft saved successfully!", "success");
 
-    const newId = `EXM-00${exams.length + 1}`;
-    setExams([...exams, {
-      ...newExam,
-      id: newId,
-      questions: parseInt(newExam.questions),
-      status: "Draft"
-    }]);
-
-    setIsSavingExam(false);
-    setIsCreateModalOpen(false);
-    showToast("Exam draft saved successfully!", "success");
-
-    // Open questions modal
-    setSavedQuestionsCount(0);
-    setCurrentQuestion({ text: "", options: ["", "", "", ""], correctOption: 0 });
-    setIsQuestionsModalOpen(true);
+        // Open questions modal
+        setSavedQuestionsCount(0);
+        setCurrentQuestion({ text: "", options: ["", "", "", ""], correctOption: 0 });
+        setIsQuestionsModalOpen(true);
+      } else {
+        showToast(data.error || "Failed to create exam", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setIsSavingExam(false);
+    }
   };
 
   const handleSaveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeExamId) return;
     if (!currentQuestion.text || currentQuestion.options.some(o => !o)) {
       showToast("Please fill all question fields and options.", "error");
       return;
     }
 
     setIsSavingQuestion(true);
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    setSavedQuestionsCount(prev => prev + 1);
-    setIsSavingQuestion(false);
-    showToast("Question saved successfully!", "success");
-
-    // Reset for next question
-    setCurrentQuestion({ text: "", options: ["", "", "", ""], correctOption: 0 });
+    try {
+      const res = await fetch(`/api/admin/exams/${activeExamId}/questions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentQuestion),
+      });
+      if (res.ok) {
+        setSavedQuestionsCount(prev => prev + 1);
+        showToast("Question saved successfully!", "success");
+        // Reset for next question
+        setCurrentQuestion({ text: "", options: ["", "", "", ""], correctOption: 0 });
+      } else {
+        showToast("Failed to save question", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    } finally {
+      setIsSavingQuestion(false);
+    }
   };
 
   const handleSaveManage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manageExam) return;
-    setExams(exams.map(ex => ex.id === manageExam.id ? manageExam : ex));
-    setManageExam(null);
-    showToast("Exam updated successfully!", "success");
+
+    try {
+      const res = await fetch(`/api/admin/exams/${manageExam.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(manageExam),
+      });
+      if (res.ok) {
+        setExams(exams.map(ex => ex.id === manageExam.id ? manageExam : ex));
+        setManageExam(null);
+        showToast("Exam updated successfully!", "success");
+      } else {
+        showToast("Failed to update exam", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred", "error");
+    }
   };
 
-  const handleDeleteExam = () => {
+  const handleDeleteExam = async () => {
+    if (!manageExam) return;
     if (window.confirm("Are you sure you want to delete this exam?")) {
-      if (!manageExam) return;
-      setExams(exams.filter(ex => ex.id !== manageExam.id));
-      setManageExam(null);
-      showToast("Exam deleted successfully!", "success");
+      try {
+        const res = await fetch(`/api/admin/exams/${manageExam.id}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          setExams(exams.filter(ex => ex.id !== manageExam.id));
+          setManageExam(null);
+          showToast("Exam deleted successfully!", "success");
+        } else {
+          showToast("Failed to delete exam", "error");
+        }
+      } catch (error) {
+        showToast("An error occurred", "error");
+      }
     }
   };
 
@@ -162,7 +235,7 @@ export default function ExamsPage() {
           <tbody className="divide-y divide-gray-100">
             {filteredExams.map((exam) => (
               <tr key={exam.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4 font-mono text-xs text-gray-500">{exam.id}</td>
+                <td className="px-6 py-4 font-mono text-xs text-gray-500 font-bold">{exam.code}</td>
                 <td className="px-6 py-4 font-medium text-gray-900">{exam.name}</td>
                 <td className="px-6 py-4 text-gray-500">{exam.questions}</td>
                 <td className="px-6 py-4 text-gray-500">{exam.duration}m</td>
@@ -212,7 +285,16 @@ export default function ExamsPage() {
 
             <form onSubmit={handleCreateExam} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Exam Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Course Code</label>
+                <input
+                  type="text" required value={newExam.code} onChange={(e) => setNewExam({ ...newExam, code: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand"
+                  placeholder="e.g. CSC102"
+                  disabled={isSavingExam}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Course Title</label>
                 <input
                   type="text" required value={newExam.name} onChange={(e) => setNewExam({ ...newExam, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand"
@@ -349,7 +431,13 @@ export default function ExamsPage() {
             <form onSubmit={handleSaveManage} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Course Code</label>
-                <input type="text" disabled value={manageExam.id} className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500" />
+                <input
+                  type="text"
+                  value={manageExam.code}
+                  onChange={(e) => setManageExam({ ...manageExam, code: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand"
+                  placeholder="e.g. CSC102"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Course Title</label>

@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Student {
+  id           String   @id @default(uuid())
+  matricNumber String   @unique
+  name         String
+  email        String   @unique
+  password     String
+  enrolled     Int      @default(0)
+  completed    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  violations   Violation[]
+  sessions     Session[]
+}
+
+model Exam {
+  id           String   @id @default(uuid())
+  courseCode   String   @unique
+  title        String
+  questions    Int      @default(0)
+  duration     Int      // in minutes
+  status       String   @default("Draft") // Active, Draft, Closed
+  dueDate      DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  violations   Violation[]
+  sessions     Session[]
+  examQuestions Question[]
+}
+
+model Question {
+  id            String   @id @default(uuid())
+  examId        String
+  text          String
+  options       Json     // Array of strings
+  correctOption Int      // Index of the correct option
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+}
+
+model Violation {
+  id          String   @id @default(uuid())
+  studentId   String
+  examId      String
+  type        String   // FACE, OBJECT
+  message     String
+  severity    String   @default("Medium") // High, Medium
+  time        String   // HH:MM AM/PM
+  date        String   // YYYY-MM-DD
+  createdAt   DateTime @default(now())
+
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id             String   @id @default(uuid())
+  studentId      String
+  examId         String
+  status         String   @default("Normal") // Normal, Violation
+  faceStatus     String   @default("1 face")
+  objectDetected String   @default("None")
+  answers        Json?    // Student's submitted answers { questionIdx: optionText }
+  submittedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  student        Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam           Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, examId])
+}

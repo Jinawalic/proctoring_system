@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, ShieldAlert, ArrowRight } from "lucide-react";
+import { Lock, Mail, ShieldAlert, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,17 +10,47 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const [toast, setToast] = useState<{ show: boolean, msg: string, type: "success" | "error" } | null>(null);
+
+  const showToast = (msg: string, type: "success" | "error") => {
+    setToast({ show: true, msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Mock login logic
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 1000);
+    try {
+      const res = await fetch("/api/auth/student-login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast("Login successful! Redirecting...", "success");
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 1500);
+      } else {
+        showToast(data.error || "Login failed", "error");
+      }
+    } catch (error) {
+      showToast("An error occurred during login", "error");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-[200] flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-in slide-in-from-top-2 ${toast.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+          {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <AlertCircle className="w-5 h-5 text-red-500" />}
+          {toast.msg}
+        </div>
+      )}
       {/* Decorative background gradients */}
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-brand/20 blur-[120px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-brand/10 blur-[100px] rounded-full pointer-events-none" />

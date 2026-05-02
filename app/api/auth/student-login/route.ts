@@ -1,0 +1,25 @@
+import { prisma } from "../../../../lib/prisma";
+import { NextResponse } from "next/server";
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { email, password } = body;
+
+    const student = await prisma.student.findUnique({
+      where: { email },
+    });
+
+    if (!student || student.password !== password) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    // In a real app, we would create a session/JWT here
+    return NextResponse.json({ 
+      message: "Login successful", 
+      student: { id: student.id, name: student.name, email: student.email } 
+    });
+  } catch (error) {
+    return NextResponse.json({ error: "Login failed" }, { status: 500 });
+  }
+}

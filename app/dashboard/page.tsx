@@ -4,40 +4,36 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Clock, BookOpen, ChevronRight, CheckCircle2, Shield } from "lucide-react";
 
-// Mock Exam Data
-const EXAMS = [
-  {
-    id: "cs101",
-    title: "Introduction to Computer Science",
-    duration: 30, // in minutes
-    questions: 20,
-    status: "available", // available, completed, upcoming
-    dueDate: "2026-05-05",
-  },
-  {
-    id: "math201",
-    title: "Advanced Calculus II",
-    duration: 60,
-    questions: 40,
-    status: "upcoming",
-    dueDate: "2026-05-10",
-  },
-  {
-    id: "phy105",
-    title: "Physics Mechanics",
-    duration: 45,
-    questions: 30,
-    status: "completed",
-    dueDate: "2026-05-01",
-  },
-];
 
 export default function DashboardPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [exams, setExams] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
+    const fetchExams = async () => {
+      try {
+        const res = await fetch("/api/exams");
+        const data = await res.json();
+        if (res.ok) {
+          setExams(data.map((ex: any) => ({
+            id: ex.id,
+            title: ex.title,
+            duration: ex.duration,
+            questions: ex.questions,
+            status: ex.status === 'Active' ? 'available' : ex.status.toLowerCase(),
+            dueDate: ex.dueDate || "No due date"
+          })));
+        }
+      } catch (error) {
+        console.error("Failed to load exams");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchExams();
   }, []);
 
   if (!mounted) return null;
@@ -61,8 +57,22 @@ export default function DashboardPage() {
         {/* Exams List */}
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 mb-4">Your Exams</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {EXAMS.map((exam) => (
+          
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm animate-pulse h-48" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {exams.length === 0 && !isLoading && (
+              <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-dashed border-gray-300">
+                <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">No active exams available at the moment.</p>
+              </div>
+            )}
+            {exams.map((exam) => (
               <div 
                 key={exam.id}
                 className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col transition-all hover:shadow-md hover:border-brand/30 group"
@@ -115,6 +125,7 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+          )}
         </div>
 
       </div>
