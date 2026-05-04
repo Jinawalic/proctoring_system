@@ -5,37 +5,78 @@ import { useRouter } from "next/navigation";
 import ProctoringView from "@/components/ProctoringView";
 import { Clock, AlertCircle, CheckCircle2, ChevronRight, ChevronLeft } from "lucide-react";
 
-// Mock Exam Questions
-const MOCK_QUESTIONS = [
-  { id: 1, text: "What does HTML stand for?", options: ["Hyper Text Markup Language", "High Text Markup Language", "Hyper Tabular Markup Language", "None of these"] },
-  { id: 2, text: "Which of the following is not a JavaScript framework?", options: ["Vue", "React", "Node", "Cassandra"] },
-  { id: 3, text: "What is the CSS property used to change text color?", options: ["text-color", "color", "font-color", "text-style"] },
-  { id: 4, text: "What is the correct way to declare a variable in ES6?", options: ["var", "let", "const", "Both let and const"] },
-  { id: 5, text: "Which symbol is used for comments in JavaScript?", options: ["//", "<!--", "/*", "#"] }
-];
-
 export default function ExamPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const unwrappedParams = use(params);
   
+  const [exam, setExam] = useState<any>(null);
+  const [questions, setQuestions] = useState<any[]>([]);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [timeLeft, setTimeLeft] = useState(30 * 60); // 30 mins
+  const [timeLeft, setTimeLeft] = useState(0);
   const [violations, setViolations] = useState<{time: string, type: string, msg: string}[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [student, setStudent] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Load student and questions
+  useEffect(() => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      setStudent(JSON.parse(userStr));
+    } else {
+      router.push("/");
+      return;
+    }
+
+    const fetchData = async () => {
+      try {
+        const { id } = unwrappedParams;
+        
+        // Fetch exam details
+        const examRes = await fetch(`/api/exams`);
+        const exams = await examRes.json();
+        const currentExam = exams.find((ex: any) => ex.id === id);
+        
+        if (currentExam) {
+          setExam(currentExam);
+          setTimeLeft(currentExam.duration * 60);
+        }
+
+        // Mark exam as started
+        await fetch(`/api/exams/${id}/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentId: JSON.parse(userStr).id })
+        });
+
+        // Fetch questions
+        const questionsRes = await fetch(`/api/exams/${id}/questions`);
+        const questionsData = await questionsRes.json();
+        setQuestions(questionsData);
+      } catch (error) {
+        console.error("Failed to fetch exam data", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [unwrappedParams.id, router]);
 
   // Timer logic
   useEffect(() => {
-    if (timeLeft <= 0) {
+    if (timeLeft <= 0 && !loading && questions.length > 0) {
       handleSubmit();
       return;
     }
     const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, [timeLeft, loading, questions.length]);
 
   const formatTime = (seconds: number) => {
+    if (seconds < 0) return "00:00";
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
@@ -59,35 +100,69 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       const newViolation = { time: new Date().toISOString(), type, msg: message };
       
       // Log to API (fire and forget)
-      fetch('/api/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ examId: unwrappedParams.id, violation: newViolation })
-      }).catch(console.error);
+      if (student) {
+        fetch('/api/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            examId: unwrappedParams.id, 
+            studentId: student.id,
+            violation: newViolation 
+          })
+        }).catch(console.error);
+      }
 
       return [...prev, newViolation];
     });
-  }, [unwrappedParams.id]);
+  }, [unwrappedParams.id, student]);
+
+  const [toast, setToast] = useState<{ show: boolean, msg: string, type: "success" | "error" } | null>(null);
+  const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
+
+  const showToast = (msg: string, type: "success" | "error") => {
+    setToast({ show: true, msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleSubmit = async () => {
+    if (isSubmitting || isSubmitted) return;
     setIsSubmitting(true);
+    setShowConfirmSubmit(false);
     try {
-      await fetch('/api/submit', {
+      const res = await fetch('/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           examId: unwrappedParams.id, 
+          studentId: student?.id,
           answers, 
           violationsCount: violations.length 
         })
       });
-      setIsSubmitted(true);
+      if (res.ok) {
+        setIsSubmitted(true);
+        showToast("Exam submitted successfully!", "success");
+      } else {
+        showToast("Submission failed. Please try again.", "error");
+      }
     } catch (error) {
       console.error("Failed to submit exam", error);
+      showToast("An error occurred during submission", "error");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-zinc-500 font-medium">Loading exam questions...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isSubmitted) {
     return (
@@ -109,16 +184,65 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     );
   }
 
-  const currentQ = MOCK_QUESTIONS[currentQuestionIdx];
+  const currentQ = questions[currentQuestionIdx];
+
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center p-8 bg-white rounded-2xl shadow-sm border border-gray-200 max-w-md">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-zinc-900 mb-2">No Questions Found</h2>
+          <p className="text-zinc-500 mb-6">This exam doesn't have any questions yet or they failed to load.</p>
+          <button onClick={() => router.push('/dashboard')} className="px-6 py-2 bg-zinc-900 text-white rounded-lg">Return to Dashboard</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col font-sans">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-[200] flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-in slide-in-from-top-2 ${toast.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+          {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <AlertCircle className="w-5 h-5 text-red-500" />}
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Confirmation Toast */}
+      {showConfirmSubmit && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-white border border-gray-200 shadow-2xl rounded-2xl p-6 flex flex-col items-center gap-4 animate-in slide-in-from-top-4 duration-300 w-full max-w-sm">
+           <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+              <AlertCircle className="w-6 h-6 text-amber-600" />
+           </div>
+           <div className="text-center">
+              <h4 className="text-lg font-bold text-gray-900">Submit Exam?</h4>
+              <p className="text-sm text-gray-500">Are you sure you want to finalize your submission? This action cannot be undone.</p>
+           </div>
+           <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => setShowConfirmSubmit(false)}
+                className="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Continue Exam
+              </button>
+              <button 
+                onClick={handleSubmit}
+                className="flex-1 py-2 bg-brand text-white rounded-lg text-sm font-medium hover:bg-brand-hover"
+              >
+                Yes, Submit
+              </button>
+           </div>
+        </div>
+      )}
+
       {/* Top Navbar */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold text-zinc-900">Exam: CS101</h1>
+          <h1 className="text-xl font-bold text-zinc-900">Exam: {exam?.courseCode || 'Loading...'}</h1>
           <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-zinc-100 rounded-full text-sm font-medium text-zinc-600">
-            Question {currentQuestionIdx + 1} of {MOCK_QUESTIONS.length}
+            Question {currentQuestionIdx + 1} of {questions.length}
           </div>
         </div>
         
@@ -130,7 +254,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             {formatTime(timeLeft)}
           </div>
           <button 
-            onClick={handleSubmit}
+            onClick={() => setShowConfirmSubmit(true)}
             disabled={isSubmitting}
             className="px-4 py-2 bg-brand hover:bg-brand-hover text-white rounded-lg font-medium shadow-sm disabled:opacity-70 transition-colors"
           >
@@ -151,7 +275,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </h2>
 
             <div className="space-y-4">
-              {currentQ.options.map((option, idx) => {
+              {(currentQ.options as string[]).map((option, idx) => {
                 const isSelected = answers[currentQuestionIdx] === option;
                 return (
                   <button
@@ -188,7 +312,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             </button>
             
             <div className="flex gap-1.5">
-              {MOCK_QUESTIONS.map((_, idx) => (
+              {questions.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setCurrentQuestionIdx(idx)}
@@ -203,13 +327,9 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
               ))}
             </div>
 
-            {currentQuestionIdx === MOCK_QUESTIONS.length - 1 ? (
+            {currentQuestionIdx === questions.length - 1 ? (
               <button
-                onClick={() => {
-                  if (window.confirm("Are you sure you want to submit your exam?")) {
-                    handleSubmit();
-                  }
-                }}
+                onClick={() => setShowConfirmSubmit(true)}
                 disabled={isSubmitting}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-white bg-brand hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -217,7 +337,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
               </button>
             ) : (
               <button
-                onClick={() => setCurrentQuestionIdx(prev => Math.min(MOCK_QUESTIONS.length - 1, prev + 1))}
+                onClick={() => setCurrentQuestionIdx(prev => Math.min(questions.length - 1, prev + 1))}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-white bg-zinc-900 hover:bg-black:bg-zinc-700 transition-colors"
               >
                 Next <ChevronRight className="w-5 h-5" />
@@ -257,3 +377,4 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     </div>
   );
 }
+

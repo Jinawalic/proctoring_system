@@ -74,17 +74,18 @@ export default function ProctoringView({ onViolation }: ProctoringViewProps) {
 
     // ---------------- OBJECT DETECTION ----------------
     const predictions = await model.detect(video);
-
-    console.log("Predictions:", predictions);
+    let objectViolation = false;
+    let objectMessage = "";
 
     predictions.forEach((pred) => {
-      if (pred.score < 0.5) return; // IMPORTANT FILTER
+      if (pred.score < 0.5) return;
 
       const label = pred.class;
 
       if (forbiddenObjects.includes(label)) {
-        violation = true;
-        message = `${label} detected`;
+        objectViolation = true;
+        objectMessage = `${label} detected`;
+        onViolation("OBJECT", objectMessage);
 
         const [x, y, w, h] = pred.bbox;
 
@@ -105,13 +106,13 @@ export default function ProctoringView({ onViolation }: ProctoringViewProps) {
     );
 
     const faceCount = faces.length;
+    let faceViolation = false;
+    let faceMessage = "";
 
     if (faceCount !== 1) {
-      violation = true;
-      const faceMsg = faceCount === 0 ? "No face detected" : "Multiple faces detected";
-      message = message ? `${message} & ${faceMsg}` : faceMsg;
-
-      onViolation("FACE_ERROR", faceMsg);
+      faceViolation = true;
+      faceMessage = faceCount === 0 ? "No face detected" : "Multiple faces detected";
+      onViolation("FACE", faceMessage);
     }
 
     // Draw faces
@@ -130,10 +131,9 @@ export default function ProctoringView({ onViolation }: ProctoringViewProps) {
     });
 
     // ---------------- STATUS UPDATE ----------------
-    if (violation) {
+    if (objectViolation || faceViolation) {
       setStatus("violation");
-      setViolationMsg(message);
-      onViolation("VIOLATION", message);
+      setViolationMsg(objectMessage && faceMessage ? `${objectMessage} & ${faceMessage}` : (objectMessage || faceMessage));
     } else {
       setStatus("normal");
       setViolationMsg("Normal");

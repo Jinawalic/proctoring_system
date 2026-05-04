@@ -2,150 +2,146 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, Lock, Mail, Loader2, ArrowRight } from "lucide-react";
+import { Lock, Mail, Shield, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+
+  const [toast, setToast] = useState<{ show: boolean; msg: string; type: "success" | "error" } | null>(null);
+
+  const showToast = (msg: string, type: "success" | "error") => {
+    setToast({ show: true, msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
-
-    // Mock login logic for now as requested "UI only"
-    setTimeout(() => {
-      if (email === "admin@proctor.com" && password === "admin123") {
-        router.push("/admin/students");
+    try {
+      const res = await fetch("/api/auth/admin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem("admin", JSON.stringify(data.admin));
+        showToast("Login successful! Redirecting...", "success");
+        setTimeout(() => {
+          router.push("/admin");
+        }, 1200);
       } else {
-        setError("Invalid credentials. Use admin@proctor.com / admin123");
+        showToast(data.error || "Login failed", "error");
         setIsLoading(false);
       }
-    }, 1500);
+    } catch {
+      showToast("An error occurred during login", "error");
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4 selection:bg-brand/30">
-      {/* Background Glow */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand/20 rounded-full blur-[120px] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px] pointer-events-none animate-pulse delay-700" />
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 z-[200] flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-in slide-in-from-top-2 ${
+            toast.type === "success"
+              ? "bg-green-50 text-green-800 border border-green-200"
+              : "bg-red-50 text-red-800 border border-red-200"
+          }`}
+        >
+          {toast.type === "success" ? (
+            <CheckCircle2 className="w-5 h-5 text-green-500" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-red-500" />
+          )}
+          {toast.msg}
+        </div>
+      )}
 
-      <div className="relative w-full max-w-md">
-        {/* Logo Section */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-brand to-brand-hover shadow-lg shadow-brand/20 mb-4 animate-in fade-in zoom-in duration-700">
-            <Shield className="w-8 h-8 text-white" />
+      {/* Decorative background gradients */}
+      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-brand/20 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-brand/10 blur-[100px] rounded-full pointer-events-none" />
+
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200 p-8 relative z-10 backdrop-blur-sm">
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center mb-4 border border-brand/20">
+            <Shield className="w-8 h-8 text-brand" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Admin Portal</h1>
-          <p className="text-zinc-500 mt-2 font-medium">AI Proctoring Command Center</p>
+          <h1 className="text-2xl font-bold text-zinc-900 text-center">Admin Portal</h1>
+          <p className="text-zinc-500 text-sm text-center mt-2">
+            AI Proctoring System — Administrator Access
+          </p>
         </div>
 
-        {/* Login Card */}
-        <div className="bg-zinc-900/50 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl animate-in slide-in-from-bottom-4 duration-700">
-          <form onSubmit={handleLogin} className="space-y-6">
-            {error && (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm text-center animate-shake">
-                {error}
+        <form onSubmit={handleLogin} className="space-y-5">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-zinc-700">Email Address</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Mail className="h-5 w-5 text-zinc-400" />
               </div>
-            )}
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-400 ml-1">Email Address</label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-zinc-500 group-focus-within:text-brand transition-colors">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-zinc-800/50 border border-white/5 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand transition-all"
-                  placeholder="admin@proctor.com"
-                />
-              </div>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2.5 border border-zinc-300 rounded-xl bg-zinc-50 text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                placeholder="admin@university.edu"
+              />
             </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between ml-1">
-                <label className="text-sm font-medium text-zinc-400">Password</label>
-                <button type="button" className="text-xs text-brand hover:text-brand-hover transition-colors">Forgot?</button>
-              </div>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-zinc-500 group-focus-within:text-brand transition-colors">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-zinc-800/50 border border-white/5 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand transition-all"
-                  placeholder="••••••••"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group relative w-full bg-brand hover:bg-brand-hover text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-brand/20 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed overflow-hidden"
-            >
-              <div className="relative flex items-center justify-center gap-2">
-                {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <span>Sign In to Dashboard</span>
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-              </div>
-              
-              {/* Button Shine Effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shine" />
-            </button>
-          </form>
-
-          {/* Footer Info */}
-          <div className="mt-8 pt-8 border-t border-white/5 text-center">
-            <p className="text-zinc-600 text-xs">
-              System version v2.4.0 • Secure Encryption Enabled
-            </p>
           </div>
-        </div>
 
-        {/* Back to Home */}
-        <div className="text-center mt-8">
-          <button 
-            onClick={() => router.push("/")}
-            className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-zinc-700">Password</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Lock className="h-5 w-5 text-zinc-400" />
+              </div>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2.5 border border-zinc-300 rounded-xl bg-zinc-50 text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-brand hover:bg-brand-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand disabled:opacity-70 disabled:cursor-not-allowed transition-all"
           >
-            ← Back to Public Site
+            {isLoading ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                Sign In to Dashboard
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        <div className="mt-8 text-center text-xs text-zinc-500">
+          Restricted access. Unauthorized attempts are logged and monitored.
+        </div>
+
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => router.push("/")}
+            className="text-zinc-400 hover:text-zinc-600 text-xs transition-colors"
+          >
+            ← Back to Student Login
           </button>
         </div>
       </div>
-
-      <style jsx global>{`
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-4px); }
-          75% { transform: translateX(4px); }
-        }
-        .animate-shake {
-          animation: shake 0.2s ease-in-out 0s 2;
-        }
-        @keyframes shine {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        .group-hover\\:animate-shine {
-          animation: shine 1s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }

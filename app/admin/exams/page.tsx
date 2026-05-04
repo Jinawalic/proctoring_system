@@ -470,7 +470,44 @@ export default function ExamsPage() {
               <div className="pt-4 flex justify-between border-t border-gray-100">
                 <button type="button" onClick={handleDeleteExam} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors">Delete Exam</button>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setManageExam(null)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                  <button 
+                    type="button" 
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/admin/exams/${manageExam.id}/results`);
+                        if (!res.ok) throw new Error("Failed to fetch results");
+                        const data = await res.json();
+                        
+                        // Generate CSV
+                        const headers = ["Student Name", "Matric Number", "Score", "Total Questions", "Status", "Submitted At"];
+                        const rows = data.sessions.map((s: any) => [
+                          s.student.name,
+                          s.student.matricNumber,
+                          s.score || 0,
+                          data.questions,
+                          s.isInvalidated ? "Invalidated" : "Normal",
+                          s.submittedAt ? new Date(s.submittedAt).toLocaleString() : "N/A"
+                        ]);
+                        
+                        const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+                        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                        const link = document.createElement("a");
+                        const url = URL.createObjectURL(blob);
+                        link.setAttribute("href", url);
+                        link.setAttribute("download", `results_${manageExam.code}.csv`);
+                        link.style.visibility = 'hidden';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        showToast("Result downloaded successfully", "success");
+                      } catch (error) {
+                        showToast("Failed to download result", "error");
+                      }
+                    }} 
+                    className="px-4 py-2 border border-brand text-brand rounded-lg text-sm font-medium hover:bg-brand/5"
+                  >
+                    Download Result
+                  </button>
                   <button type="submit" className="px-4 py-2 bg-brand text-white rounded-lg text-sm font-medium hover:bg-brand-hover shadow-sm">Save Changes</button>
                 </div>
               </div>
@@ -481,3 +518,4 @@ export default function ExamsPage() {
     </div>
   );
 }
+

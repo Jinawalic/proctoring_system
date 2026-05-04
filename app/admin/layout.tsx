@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  Video, 
-  Users, 
-  FileText, 
-  AlertTriangle, 
-  Settings, 
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard,
+  Video,
+  Users,
+  FileText,
+  AlertTriangle,
+  Settings,
   LogOut,
   Menu,
   X
@@ -18,15 +18,37 @@ import {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  // All hooks must come before any conditional return (Rules of Hooks)
+  useEffect(() => {
+    // Login page needs no auth check
+    if (pathname === "/admin/login") return;
+    const admin = localStorage.getItem("admin");
+    if (!admin) {
+      router.replace("/admin/login");
+    } else {
+      setIsAuthorized(true);
+    }
+  }, [pathname, router]);
+
+  // Login page renders standalone — no sidebar
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
+
+  // Block render until auth is confirmed
+  if (!isAuthorized) return null;
 
   const navItems = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
-    { name: "Live Sessions", href: "/admin/sessions", icon: Video },
+    // { name: "Live Sessions", href: "/admin/sessions", icon: Video },
     { name: "Students", href: "/admin/students", icon: Users },
     { name: "Exams", href: "/admin/exams", icon: FileText },
     { name: "Violations", href: "/admin/violations", icon: AlertTriangle },
-    { name: "Reports / Logs", href: "/admin/reports", icon: FileText },
+    // { name: "Reports / Logs", href: "/admin/reports", icon: FileText },
     { name: "Settings", href: "/admin/settings", icon: Settings },
   ];
 
@@ -34,9 +56,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-gray-100 font-sans flex text-gray-900">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-gray-900/50 z-40 lg:hidden" 
-          onClick={() => setSidebarOpen(false)} 
+        <div
+          className="fixed inset-0 bg-gray-900/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
         />
       )}
 
@@ -61,11 +83,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors group ${
-                  isActive 
-                    ? "bg-gray-800 text-white" 
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors group ${isActive
+                    ? "bg-gray-800 text-white"
                     : "hover:bg-gray-800/50 hover:text-white"
-                }`}
+                  }`}
               >
                 <Icon className={`w-5 h-5 ${isActive ? "text-brand" : "text-gray-400 group-hover:text-gray-300"}`} />
                 <span className="font-medium text-sm">{item.name}</span>
@@ -75,7 +96,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
-          <button className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors">
+          <button
+            onClick={() => { localStorage.removeItem("admin"); router.push("/admin/login"); }}
+            className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+          >
             <LogOut className="w-5 h-5" />
             <span className="font-medium text-sm">Logout</span>
           </button>

@@ -1,11 +1,9 @@
 "use client";
 
-import { Users, Search, MoreVertical, X, Check, Edit2, Trash2, Key, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { useState } from "react";
+import { Users, Search, MoreVertical, X, Edit2, Trash2, Key, Loader2, CheckCircle2, AlertCircle, Upload, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect } from "react";
 
-
-
-import { useEffect } from "react";
+const PAGE_SIZE = 10;
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<any[]>([]);
@@ -19,6 +17,7 @@ export default function StudentsPage() {
 
   const [newStudent, setNewStudent] = useState({ name: "", email: "", matricNumber: "" });
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   // Loading States
   const [isSaving, setIsSaving] = useState(false);
@@ -26,6 +25,17 @@ export default function StudentsPage() {
 
   // Toast
   const [toast, setToast] = useState<{ show: boolean, msg: string, type: "success" | "error" } | null>(null);
+
+  // CSV Import
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    message: string;
+    created: number;
+    skipped: number;
+    errors: string[];
+  } | null>(null);
 
   const showToast = (msg: string, type: "success" | "error") => {
     setToast({ show: true, msg, type });
@@ -53,6 +63,9 @@ export default function StudentsPage() {
     student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.matricNumber.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
+  const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,6 +167,31 @@ export default function StudentsPage() {
     }
   };
 
+  const handleImportCSV = async () => {
+    if (!csvFile) return;
+    setIsImporting(true);
+    setImportResult(null);
+    try {
+      const form = new FormData();
+      form.append("file", csvFile);
+      const res = await fetch("/api/admin/students/import", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setImportResult(data);
+        if (data.created > 0) fetchStudents();
+      } else {
+        showToast(data.error || "Import failed", "error");
+      }
+    } catch {
+      showToast("An error occurred during import", "error");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10 relative" onClick={() => setActiveDropdown(null)}>
 
@@ -184,10 +222,17 @@ export default function StudentsPage() {
               type="text"
               placeholder="Search students..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
               className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand w-full sm:w-64"
             />
           </div>
+          <button
+            onClick={() => { setIsImportModalOpen(true); setCsvFile(null); setImportResult(null); }}
+            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import CSV
+          </button>
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="px-4 py-2 bg-brand text-white rounded-lg text-sm font-medium hover:bg-brand-hover transition-colors shadow-sm"
@@ -210,7 +255,7 @@ export default function StudentsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filteredStudents.map((student) => (
+            {paginatedStudents.map((student) => (
               <tr key={student.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 font-mono text-xs text-gray-500">{student.matricNumber}</td>
                 <td className="px-6 py-4 font-medium text-gray-900">{student.name}</td>
@@ -265,6 +310,47 @@ export default function StudentsPage() {
             )}
           </tbody>
         </table>
+
+        {/* Pagination Footer */}
+        {filteredStudents.length > PAGE_SIZE && (
+          <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 rounded-b-xl flex items-center justify-between">
+            <span className="text-xs text-gray-500">
+              Page {page} of {totalPages} &nbsp;·&nbsp; {filteredStudents.length} students
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="p-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                const pg = Math.max(1, Math.min(page - 2 + i, totalPages - 4 + i));
+                return (
+                  <button
+                    key={pg}
+                    onClick={() => setPage(pg)}
+                    className={`w-8 h-8 rounded-md text-xs font-medium border transition-colors ${
+                      page === pg
+                        ? "bg-brand text-white border-brand"
+                        : "border-gray-300 text-gray-600 hover:bg-white"
+                    }`}
+                  >
+                    {pg}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="p-1.5 rounded-md border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Student Modal */}
@@ -428,6 +514,121 @@ export default function StudentsPage() {
                   {isSaving && <Loader2 className="w-4 h-4 animate-spin" />} Confirm Delete
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import CSV Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !isImporting && setIsImportModalOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Upload className="w-5 h-5 text-brand" />
+                Import Students from CSV
+              </h3>
+              <button disabled={isImporting} onClick={() => setIsImportModalOpen(false)} className="text-gray-400 hover:text-gray-700 disabled:opacity-50">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Instructions */}
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-800 space-y-1">
+                <p className="font-semibold flex items-center gap-1"><FileText className="w-4 h-4" /> CSV Format Required:</p>
+                <p>Your CSV file must have exactly these column headers:</p>
+                <code className="block bg-white border border-blue-200 rounded px-2 py-1 font-mono text-xs mt-1">
+                  Student Name, Matric Number
+                </code>
+                <p className="text-xs text-blue-600 mt-1">Students already in the database will be skipped. Default password <strong>12345678</strong> will be assigned.</p>
+              </div>
+
+              {/* File Picker */}
+              {!importResult && (
+                <div
+                  className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-brand transition-colors cursor-pointer"
+                  onClick={() => document.getElementById('csv-file-input')?.click()}
+                >
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  {csvFile ? (
+                    <p className="text-sm font-medium text-gray-800">{csvFile.name}</p>
+                  ) : (
+                    <p className="text-sm text-gray-500">Click to select a <strong>.csv</strong> file</p>
+                  )}
+                  <input
+                    id="csv-file-input"
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      setCsvFile(f);
+                      setImportResult(null);
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Import Results */}
+              {importResult && (
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <div className="flex-1 bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-green-700">{importResult.created}</p>
+                      <p className="text-xs text-green-600 mt-0.5">Created</p>
+                    </div>
+                    <div className="flex-1 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-yellow-700">{importResult.skipped}</p>
+                      <p className="text-xs text-yellow-600 mt-0.5">Skipped (exist)</p>
+                    </div>
+                    {importResult.errors.length > 0 && (
+                      <div className="flex-1 bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-red-700">{importResult.errors.length}</p>
+                        <p className="text-xs text-red-600 mt-0.5">Errors</p>
+                      </div>
+                    )}
+                  </div>
+                  {importResult.errors.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-32 overflow-y-auto">
+                      <p className="text-xs font-semibold text-red-700 mb-1">Row Errors:</p>
+                      {importResult.errors.map((e, i) => (
+                        <p key={i} className="text-xs text-red-600">{e}</p>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => { setCsvFile(null); setImportResult(null); }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Import Another File
+                  </button>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              {!importResult && (
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={isImporting}
+                    onClick={() => setIsImportModalOpen(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!csvFile || isImporting}
+                    onClick={handleImportCSV}
+                    className="px-4 py-2 bg-brand text-white rounded-lg text-sm font-medium hover:bg-brand-hover shadow-sm disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isImporting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {isImporting ? "Importing..." : "Upload & Import"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

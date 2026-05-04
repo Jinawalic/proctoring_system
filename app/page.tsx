@@ -6,7 +6,7 @@ import { Lock, Mail, ShieldAlert, ArrowRight, CheckCircle2, AlertCircle } from "
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [matricNumber, setMatricNumber] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -23,10 +23,11 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/auth/student-login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ matricNumber, password }),
       });
       const data = await res.json();
       if (res.ok) {
+        localStorage.setItem("user", JSON.stringify(data.student));
         showToast("Login successful! Redirecting...", "success");
         setTimeout(() => {
           router.push("/dashboard");
@@ -71,19 +72,19 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} className="space-y-5">
           <div className="space-y-1">
             <label className="text-sm font-medium text-zinc-700">
-              Email Address
+              Matric Number
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Mail className="h-5 w-5 text-zinc-400" />
               </div>
               <input
-                type="email"
+                type="text"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={matricNumber}
+                onChange={(e) => setMatricNumber(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2.5 border border-zinc-300 rounded-xl bg-zinc-50 text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all"
-                placeholder="student@university.edu"
+                placeholder="e.g. NSU/CSC/3001/2024"
               />
             </div>
           </div>

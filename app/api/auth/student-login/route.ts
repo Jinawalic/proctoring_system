@@ -6,14 +6,14 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, password } = body;
+    const { matricNumber, password } = body;
 
     const student = await prisma.student.findUnique({
-      where: { email },
+      where: { matricNumber },
     });
 
     if (!student || student.password !== password) {
-      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid matric number or password" }, { status: 401 });
     }
 
     // In a real app, we would create a session/JWT here
