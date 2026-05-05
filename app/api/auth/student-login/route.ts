@@ -8,8 +8,13 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { matricNumber, password } = body;
 
-    const student = await prisma.student.findUnique({
-      where: { matricNumber },
+    const student = await prisma.student.findFirst({
+      where: { 
+        matricNumber: {
+          equals: matricNumber,
+          mode: "insensitive"
+        } 
+      },
     });
 
     if (!student || student.password !== password) {
